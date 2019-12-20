@@ -1,0 +1,7 @@
+# OS X Metadata
+.DS_Store
+**/.DS_Store
+
+# Vim Swap Files
+*.swp
+*.swo
