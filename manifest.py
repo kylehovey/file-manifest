@@ -1,4 +1,5 @@
 from subprocess import check_output
+from tqdm import tqdm
 import os
 
 def digest_file(fname):
@@ -26,18 +27,24 @@ def string_for_tree(tree, lvl = 0):
     return out
 
 class Tree:
-    def __init__(self, key):
+    def __init__(self, key, category = "directory"):
         self._key = key
         self._children = {}
+        self._category = category
+
+        self._digest = None
 
     def __str__(self):
         return string_for_tree(self)
 
+    def category(self):
+        return self._category
+
     def key(self):
         return self._key
 
-    def add_child(self, key):
-        child = Tree(key)
+    def add_child(self, key, category = "directory"):
+        child = Tree(key, category)
         self._children[key] = child
 
         return child
@@ -51,6 +58,28 @@ class Tree:
     def children(self):
         return [ self.child_for(key) for key in self._children ]
 
+    def build_digest(self, progress_fn = lambda: None):
+        if self.category() == "file":
+            progress_fn(self.key())
+            self._digest = digest_file(self.key())
+
+        for child in self.children():
+            child.build_digest(progress_fn)
+
+    def file_count(self):
+        if self.category() == "file":
+            return 1
+
+        if not self.has_children():
+            return 0
+
+        leaf_count = 0
+
+        for child in self.children():
+            leaf_count += child.leaf_count()
+
+        return leaf_count
+
     def leaf_count(self):
         if not self.has_children():
             return 1
@@ -63,12 +92,7 @@ class Tree:
         return leaf_count
 
 def manifest(root):
-    org_dir = os.getcwd()
-    os.chdir(root)
-
-    ret = build_manifest(Tree('./'))
-
-    os.chdir(org_dir)
+    ret = build_manifest(Tree(root))
 
     return ret
 
@@ -76,8 +100,7 @@ def build_manifest(tree):
     for root, subdirs, files in os.walk(tree.key()):
         for file in files:
             fpath = os.path.join(root, file)
-            digest = digest_file(fpath)
-            tree.add_child(file + ' ' + digest)
+            tree.add_child(fpath, "file")
 
         for subdir in subdirs:
             build_manifest(tree.add_child(os.path.join(root, subdir)))
@@ -87,8 +110,10 @@ def build_manifest(tree):
     return tree
 
 if __name__ == '__main__':
-    treeA = manifest('./test/A/')
-    treeB = manifest('./test/B/')
+    treeA = manifest('/Users/speleo/Documents/Programs/python')
 
-    print treeA
-    print treeB
+    with tqdm(total=treeA.file_count(), unit='files') as pbar:
+        def progress_fn(fname):
+            pbar.update(1)
+
+        treeA.build_digest(progress_fn)
